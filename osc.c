@@ -3,6 +3,8 @@
 #define osc_hton32(i)   (htobe32(*((uint32_t*)(&i))))
 #define osc_hton64(i)   (htobe64(*((uint64_t*)(&i))))
 
+#define ROUND32(i)      ((i + 3) & ~0x03)
+
 #ifndef NULL
 #define NULL 0
 #endif
@@ -16,7 +18,7 @@
 
 static inline char* osc_write_aligned(char *buffer, size_t remain, const void *source, size_t len, size_t already_written) {
     size_t unrounded    = len + already_written;
-    size_t rounded      = (unrounded + 3) & ~0x03;
+    size_t rounded      = ROUND32(unrounded);
     
     if (rounded - already_written > remain) return NULL;
     
@@ -183,8 +185,44 @@ int tuio_bundle_source(tuio_bundle_t *bundle, const char *source) {
 }
 
 int tuio_bundle_alive(tuio_bundle_t *bundle, int32_t *s_ids, size_t count) {
-    /* this is a slippery one */
-    return 0;
+    
+    char *pos       = bundle->osc_bundle.buffer_pos,
+         *end       = bundle->osc_bundle.buffer_end;
+         
+    if (end - pos < sizeof(int32_t)) return 0;
+    
+    char *before        = pos;
+    const char *addr    = profile_addresses[bundle->type];
+    
+    pos += sizeof(int32_t);
+    pos = osc_write_aligned(pos, end - pos, addr, strlen(addr) + 1, 0);
+    if (!pos) return 0;
+    
+    int i;
+    char *type_end = pos + ROUND32(count + 2);
+    
+    if (type_end + sizeof(int32_t) * count > end) {
+        return 0;
+    }
+    
+    *(pos++) = ',';
+    for (i = 0; i < count; i++) *(pos++) = 'i';
+    while (pos < type_end) *(pos++) = 0;
+    
+    for (i = 0; i < count; i++) {
+        uint32_t id_nbo = osc_hton32(s_ids[i]);
+        memcpy(pos, &id_nbo, sizeof(int32_t));
+        pos += 4;
+    }
+    
+    int32_t written = pos - before + sizeof(int32_t);
+    uint32_t written_nbo = osc_hton32(written);
+    memcpy(before, &written_nbo, sizeof(uint32_t));
+    
+    bundle->osc_bundle.buffer_pos = pos;
+    
+    return 1;
+    
 }
 
 int tuio_bundle_set(tuio_bundle_t *bundle, tuio_msg_t *msg) {
