@@ -7,8 +7,6 @@
 #define NULL 0
 #endif
 
-#include <stdio.h>
-
 #define WRITE_FIXED(type, va_type, bits) \
     if (end - pos < sizeof(type)) return -1; \
     type real_val = (type) va_arg(args, va_type); \
@@ -105,7 +103,7 @@ int osc_write(char *buffer, size_t buffer_len, const char *address, const char *
     return written;
 }
 
-int osc_bundle_init(osc_bundle_t *bundle, char *buffer, size_t buffer_sz) {
+void osc_bundle_init(osc_bundle_t *bundle, char *buffer, size_t buffer_sz) {
     bundle->buffer      = buffer;
     bundle->buffer_pos  = buffer;
     bundle->buffer_end  = buffer + buffer_sz;
@@ -167,32 +165,60 @@ int osc_bundle_write(osc_bundle_t *bundle, const char *address, const char *form
     return retval;
 }
 
-int tuio_write_2Dobj(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg) {
-    return osc_write(buffer, buffer_len, "/tuio/2Dobj",
-                                         "siiffffffff", "set",
-                                                        msg->session_id,
-                                                        msg->class_id,
-                                                        msg->x, msg->y, msg->a,
-                                                        msg->vx, msg->vy, msg->va,
-                                                        msg->motion_acceleration,
-                                                        msg->rotation_acceleration);
+static const char* profile_addresses[] = {
+    NULL,
+    "/tuio/2Dobj",
+    "/tuio/2Dcur",
+    "/tuio/2Dblb"
+};
+
+int tuio_bundle_start(tuio_bundle_t *bundle, osc_timetag_t when, tuio_profile_t type) {
+    if (!osc_bundle_start(&bundle->osc_bundle, when)) return 0;
+    bundle->type = type;
+    return 1;
 }
 
-int tuio_write_2Dcur(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg) {
-    return osc_write(buffer, buffer_len, "/tuio/2Dcur",
-                                         "sifffff", "set",
-                                                    msg->session_id,
-                                                    msg->x, msg->y,
-                                                    msg->vx, msg->vy,
-                                                    msg->motion_acceleration);
+int tuio_bundle_source(tuio_bundle_t *bundle, const char *source) {
+    return osc_bundle_write(&bundle->osc_bundle, profile_addresses[bundle->type], "ss", "source", source);
 }
 
-int tuio_write_2Dblb(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg) {
-    return osc_write(buffer, buffer_len, "/tuio/2Dblb",
-                                         "sfffffffffff", "set",
+int tuio_bundle_alive(tuio_bundle_t *bundle, int32_t *s_ids, size_t count) {
+    /* this is a slippery one */
+    return 0;
+}
+
+int tuio_bundle_set(tuio_bundle_t *bundle, tuio_msg_t *msg) {
+    switch (bundle->type) {
+        case TUIO_2D_OBJ:
+            return osc_bundle_write(&bundle->osc_bundle, profile_addresses[bundle->type],
+                                                         "siiffffffff", "set",
+                                                         msg->session_id,
+                                                         msg->class_id,
+                                                         msg->x, msg->y, msg->a,
+                                                         msg->vx, msg->vy, msg->va,
+                                                         msg->motion_acceleration,
+                                                         msg->rotation_acceleration);
+        case TUIO_2D_CUR:
+            return osc_bundle_write(&bundle->osc_bundle, profile_addresses[bundle->type],
+                                                         "sifffff", "set",
+                                                         msg->session_id,
+                                                         msg->x, msg->y,
+                                                         msg->vx, msg->vy,
+                                                         msg->motion_acceleration);
+        case TUIO_2D_BLB:
+            return osc_bundle_write(&bundle->osc_bundle, profile_addresses[bundle->type],
+                                                         "sfffffffffff", "set",
                                                          msg->x, msg->y, msg->a,
                                                          msg->width, msg->height, msg->area,
                                                          msg->vx, msg->vy, msg->va,
                                                          msg->motion_acceleration,
                                                          msg->rotation_acceleration);
+        default:
+            return 0;
+    }
 }
+
+int tuio_bundle_fseq(tuio_bundle_t *bundle, int32_t fseq) {
+    return osc_bundle_write(&bundle->osc_bundle, profile_addresses[bundle->type], "si", "fseq", fseq);
+}
+

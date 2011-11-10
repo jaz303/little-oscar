@@ -48,12 +48,23 @@ typedef struct osc_bundle {
 int     osc_writev(char *buffer, size_t buffer_len, const char *address, const char *format, va_list args);
 int     osc_write(char *buffer, size_t buffer_len, const char *address, const char *format, ...);
 
-int     osc_bundle_init(osc_bundle_t *bundle, char *buffer, size_t buffer_sz);
+void    osc_bundle_init(osc_bundle_t *bundle, char *buffer, size_t buffer_sz);
 int     osc_bundle_start(osc_bundle_t *bundle, osc_timetag_t when);
 int     osc_bundle_writev(osc_bundle_t *bundle, const char *address, const char *format, va_list args);
 int     osc_bundle_write(osc_bundle_t *bundle, const char *address, const char *format, ...);
 
-struct tuio_msg_2d {
+typedef enum {
+    TUIO_2D_OBJ     = 1,
+    TUIO_2D_CUR     = 2,
+    TUIO_2D_BLB     = 3
+} tuio_profile_t;
+
+typedef struct tuio_bundle {
+    osc_bundle_t        osc_bundle;
+    tuio_profile_t      type;
+} tuio_bundle_t;
+
+typedef struct tuio_msg {
     int32_t     session_id;
     int32_t     class_id;
     float       x, y, a;
@@ -61,12 +72,15 @@ struct tuio_msg_2d {
     float       motion_acceleration;
     float       rotation_acceleration;
     float       width, height, area;
-};
+} tuio_msg_t;
 
 // http://www.tuio.org/?tuio11
 
-int tuio_write_2Dobj(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg);
-int tuio_write_2Dcur(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg);
-int tuio_write_2Dblb(char *buffer, size_t buffer_len, struct tuio_msg_2d *msg);
+void    tuio_bundle_init(tuio_bundle_t *bundle, char *buffer, size_t buffer_sz);
+int     tuio_bundle_start(tuio_bundle_t *bundle, osc_timetag_t when, tuio_profile_t type);
+int     tuio_bundle_source(tuio_bundle_t *bundle, const char *source);
+int     tuio_bundle_alive(tuio_bundle_t *bundle, int32_t *s_ids, size_t count);
+int     tuio_bundle_set(tuio_bundle_t *bundle, tuio_msg_t *msg);
+int     tuio_bundle_fseq(tuio_bundle_t *bundle, int32_t fseq);
 
 #endif
