@@ -38,6 +38,9 @@ typedef uint64_t osc_timetag_t;
 #define OSC_TIME(seconds, fractional)       OSC_TIMETAG(seconds, (uint32_t)(((float)fractional)*0xffffffff))
 #define OSC_NOW                             OSC_TIMETAG(0,1)
 
+//
+// Write
+
 typedef struct osc_bundle {
     char    *buffer;
     char    *buffer_pos;
@@ -52,6 +55,104 @@ void    osc_bundle_init(osc_bundle_t *bundle, char *buffer, size_t buffer_sz);
 int     osc_bundle_start(osc_bundle_t *bundle, osc_timetag_t when);
 int     osc_bundle_writev(osc_bundle_t *bundle, const char *address, const char *format, va_list args);
 int     osc_bundle_write(osc_bundle_t *bundle, const char *address, const char *format, ...);
+
+//
+// Read
+
+typedef struct osc_reader {
+    
+} osc_reader_t;
+
+typedef struct osc_arg {
+    char type;
+    union {
+        int32_t         val_int32;
+        int64_t         val_int64;
+        osc_timetag_t   val_timetag;
+        float           val_float;
+        double          val_double;
+        const char*     val_str;
+        union {
+            void*       data;
+            size_t      len;
+        } val_blob;
+    } val;
+} osc_arg_t;
+
+/*
+ * initialise an osc_reader with a buffer containing an OSC packet of a given
+ * length. the packet may contain either a single OSC message or a message
+ * bundle.
+ *
+ * for bundles, a quick sanity check will be performed to ensure that all
+ * message sizes are sane.
+ *
+ * returns 1 on success, 0 on failure.
+ *
+ * NOTE: buffer *MUST* be padded with a single null-terminator character to
+ *       prevent ill-formed OSC-strings from causing a buffer overflow.
+ *       `message_len` MUST NOT include the null-terminator. 
+ */
+int             osc_reader_init(osc_reader_t *reader, const char *buffer, size_t message_len);
+
+/* returns 1 if the packet is a bundle, 0 otherwise */
+int             osc_reader_is_bundle(osc_reader_t *reader);
+
+/* returns the bundle's OSC timetag, or OSC_NOW if packet is not a bundle */
+osc_timetag_t   osc_reader_get_bundle_timetag(osc_reader_t *reader);
+
+/*
+ * start processing the next message in this packet.
+ * returns 0 if no messages are left to process, 1 otherwise.
+ */
+int             osc_reader_start_msg(osc_reader_t *reader);
+
+/* returns 1 if the current message has a type tag, 0 otherwise */
+int             osc_reader_msg_is_typed(osc_reader_t *reader);
+
+/* returns the address of the current message. */
+const char*     osc_reader_get_msg_address(osc_reader_t *reader);
+
+/*
+ * convenience function.
+ * read the current message's next argument (and its type) into the given
+ * structure and advance the argument pointer.
+ * returns 1 if an argument was read, and 0 if there was no argument
+ * remaining to read.
+ * this function requires that the current message has a type tag.
+ */
+int             osc_reader_get_arg(osc_reader_t *reader, osc_arg_t *arg);
+
+/*
+ * advances the current message's type-tag pointer and returns the type of the
+ * next argument. returns 0 if there was no argument remaining to read.
+ * (this function requires that the current message has a type tag)
+ */
+char            osc_reader_next_arg(osc_reader_t *reader);
+
+/*
+ * the following functions read data from the current message's argument pointer
+ * then advance that pointer. no type checking is performed, so these functions
+ * can be used either in the absence of a type-tag, or after an argument's type
+ * has been read using `osc_reader_next_arg()`.
+ * 
+ * return 1 on success and 0 on failure. a failure is reported iff reading the
+ * current argument would cause the argument pointer to advance beyond the end
+ * of the current message.
+ */
+int             osc_reader_get_arg_int32(osc_reader_t *reader, int32_t *val);
+int             osc_reader_get_arg_int64(osc_reader_t *reader, int64_t *val);
+int             osc_reader_get_arg_timetag(osc_reader_t *reader, osc_timetag_t *val);
+int             osc_reader_get_arg_float(osc_reader_t *reader, float *val);
+int             osc_reader_get_arg_double(osc_reader_t *reader, double *val);
+int             osc_reader_get_arg_str(osc_reader_t *reader, const char **val);
+int             osc_reader_get_arg_blob(osc_reader_t *reader, void *val, size_t *sz);
+
+/* returns 0 if the reader object is in an error state, 1 otherwise */
+int             osc_reader_ok(osc_reader_t *reader);
+
+//
+// TUIO
 
 typedef enum {
     TUIO_2D_OBJ     = 1,
