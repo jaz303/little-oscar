@@ -9,7 +9,7 @@
  *
  * Typedefs for fixed-size types: uint64_t, int64_t, int32_t
  * Endianness conversion functions: htobe32(), htobe64(), be32toh(), be64toh()
- * String functions: strlen(), memcpy()
+ * String functions: strlen(), strcmp(), memcpy()
  *
  * TODO: how to support va_args on micros?
  */
@@ -24,15 +24,23 @@
     #if BYTE_ORDER == BIG_ENDIAN
         #define htobe32(i)      (i)
         #define htobe64(i)      (i)
+        #define betoh32(i)      (i)
+        #define betoh64(i)      (i)
     #elif BYTE_ORDER == LITTLE_ENDIAN
         #define htobe32(i)      htonl(i)
         #define htobe64(i)      (((uint64_t)htonl(i) << 32) | htonl(i >> 32))
+        #define betoh32(i)      ntohl(i)
+        #define betoh64(i)      (((uint64_t)ntohl(i) << 32) | ntohl(i >> 32))
     #else
         #error "Byte order is undefined!"
     #endif
 #endif
 
 typedef uint64_t osc_timetag_t;
+
+#define OSC_END     -2
+#define OSC_ERROR   -1
+#define OSC_OK      0
 
 #define OSC_TIMETAG(seconds, fractional)    ((((uint64_t)seconds) << 32)|fractional)
 #define OSC_TIME(seconds, fractional)       OSC_TIMETAG(seconds, (uint32_t)(((float)fractional)*0xffffffff))
@@ -60,7 +68,13 @@ int     osc_bundle_write(osc_bundle_t *bundle, const char *address, const char *
 // Read
 
 typedef struct osc_reader {
-    
+    char*               buffer;
+    const char*         buffer_end;
+    char                is_bundle;
+    const char*         msg_ptr;
+    const char*         msg_end;
+    const char*         type_ptr;
+    const char*         arg_ptr;
 } osc_reader_t;
 
 typedef struct osc_arg {
@@ -74,7 +88,7 @@ typedef struct osc_arg {
         const char*     val_str;
         union {
             void*       data;
-            size_t      len;
+            int32_t     len;
         } val_blob;
     } val;
 } osc_arg_t;
@@ -93,13 +107,13 @@ typedef struct osc_arg {
  *       prevent ill-formed OSC-strings from causing a buffer overflow.
  *       `message_len` MUST NOT include the null-terminator. 
  */
-int             osc_reader_init(osc_reader_t *reader, const char *buffer, size_t message_len);
+int             osc_reader_init(osc_reader_t *reader, char *buffer, size_t packet_len);
 
 /* returns 1 if the packet is a bundle, 0 otherwise */
 int             osc_reader_is_bundle(osc_reader_t *reader);
 
 /* returns the bundle's OSC timetag, or OSC_NOW if packet is not a bundle */
-osc_timetag_t   osc_reader_get_bundle_timetag(osc_reader_t *reader);
+osc_timetag_t   osc_reader_get_timetag(osc_reader_t *reader);
 
 /*
  * start processing the next message in this packet.
@@ -124,8 +138,8 @@ const char*     osc_reader_get_msg_address(osc_reader_t *reader);
 int             osc_reader_get_arg(osc_reader_t *reader, osc_arg_t *arg);
 
 /*
- * advances the current message's type-tag pointer and returns the type of the
- * next argument. returns 0 if there was no argument remaining to read.
+ * returns the type at the current message's arg pointer the advances the ptr to 
+ * the next argument. returns 0 if there was no argument remaining to read.
  * (this function requires that the current message has a type tag)
  */
 char            osc_reader_next_arg(osc_reader_t *reader);
@@ -146,7 +160,7 @@ int             osc_reader_get_arg_timetag(osc_reader_t *reader, osc_timetag_t *
 int             osc_reader_get_arg_float(osc_reader_t *reader, float *val);
 int             osc_reader_get_arg_double(osc_reader_t *reader, double *val);
 int             osc_reader_get_arg_str(osc_reader_t *reader, const char **val);
-int             osc_reader_get_arg_blob(osc_reader_t *reader, void *val, size_t *sz);
+int             osc_reader_get_arg_blob(osc_reader_t *reader, void **val, int32_t *sz);
 
 /* returns 0 if the reader object is in an error state, 1 otherwise */
 int             osc_reader_ok(osc_reader_t *reader);

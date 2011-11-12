@@ -3,6 +3,9 @@
 #define osc_hton32(i)   (htobe32(*((uint32_t*)(&i))))
 #define osc_hton64(i)   (htobe64(*((uint64_t*)(&i))))
 
+#define osc_ntoh32(i)   (betoh32(*((uint32_t*)(&i))))
+#define osc_ntoh64(i)   (betoh64(*((uint64_t*)(&i))))
+
 #define ROUND32(i)      ((i + 3) & ~0x03)
 
 #ifndef NULL
@@ -166,6 +169,202 @@ int osc_bundle_write(osc_bundle_t *bundle, const char *address, const char *form
     
     return retval;
 }
+
+#pragma mark -
+#pragma mark Reading
+
+int osc_reader_init(osc_reader_t *reader, char *buffer, size_t packet_len) {
+    reader->buffer      = buffer;
+    reader->buffer_end  = buffer + packet_len;
+    
+    reader->msg_ptr     = NULL;
+    reader->msg_end     = NULL;
+    reader->type_ptr    = NULL;
+    reader->arg_ptr     = NULL;
+    
+    if (strcmp("#bundle", reader->buffer) == 0) {
+        /* traverse the buffer and convert each message length to host byte order,
+         * ensuring the reported message lengths do not cause a buffer overflow. */
+        /* TODO: is HBO conversion a bad optimisation? it makes message parsing non-reentrant */
+        char *msg_start = reader->buffer + 20; /* "#bundle" (8) + timetag (8) + msg size (4) */
+        while (msg_start < reader->buffer_end) {
+            char *msg_len = msg_start - 4;
+            int32_t hb_len = (int32_t) osc_ntoh32(*((uint32_t*)msg_len));
+            *((int32_t*)msg_len) = hb_len;
+            msg_start += hb_len;
+        }
+        
+        if (msg_start != reader->buffer_end) {
+            return OSC_ERROR;
+        }
+        
+        reader->is_bundle = 1;
+    } else {
+        reader->is_bundle = 0;
+    }
+    
+    return OSC_OK;
+}
+
+int osc_reader_is_bundle(osc_reader_t *reader) {
+    return reader->is_bundle;
+}
+
+osc_timetag_t osc_reader_get_timetag(osc_reader_t *reader) {
+    if (reader->is_bundle) {
+        return *((osc_timetag_t*)(reader->buffer + 8));
+    } else {
+        return OSC_NOW;
+    }
+}
+
+int osc_reader_start_msg(osc_reader_t *reader) {
+    if (reader->is_bundle) {
+        if (!reader->msg_ptr && !reader->msg_end) {
+            reader->msg_ptr = reader->buffer + 20; /* "#bundle" (8) + timetag (8) + msg size (4) */
+            reader->msg_end = reader->msg_ptr + *((int32_t*)(reader->msg_ptr - 4));
+        } else if (reader->msg_ptr) {
+            if (reader->msg_end == reader->buffer_end) {
+                reader->msg_ptr = NULL;
+            } else {
+                reader->msg_ptr = reader->msg_end + 4;
+                reader->msg_end = reader->msg_ptr + *((int32_t*)(reader->msg_ptr - 4));
+            }
+        }
+    } else {
+        if (!reader->msg_ptr && !reader->msg_end) {
+            reader->msg_ptr = reader->buffer;
+            reader->msg_end = reader->buffer_end;
+        } else {
+            reader->msg_ptr = NULL;
+        }
+    }
+    
+    if (reader->msg_ptr) {
+        if ((reader->msg_end - reader->msg_ptr) & 0x03) {
+            return OSC_ERROR; /* message length is not multiple of 4 */
+        }
+        
+        size_t addr_len = ROUND32(strlen(reader->msg_ptr) + 1);
+        const char *type_ptr = reader->msg_ptr + addr_len;
+        
+        if (type_ptr > reader->msg_end) {
+            return OSC_ERROR;
+        } else if (type_ptr == reader->msg_end) {
+            reader->type_ptr = NULL;
+            reader->arg_ptr = NULL;
+        } else if (*type_ptr == ',') {
+            const char *arg_ptr = type_ptr + ROUND32(strlen(type_ptr) + 1);
+            if (arg_ptr > reader->msg_end) {
+                return OSC_ERROR;
+            } else {
+                reader->type_ptr = type_ptr + 1; /* skip leading ',' */
+                reader->arg_ptr = arg_ptr;
+            }
+        } else {
+            reader->type_ptr = NULL;
+            reader->arg_ptr = type_ptr;
+        }
+    }
+    
+    return reader->msg_ptr ? OSC_OK : OSC_END;
+}
+
+/* returns 1 if the current message has a type tag, 0 otherwise */
+int osc_reader_msg_is_typed(osc_reader_t *reader) {
+    return reader->type_ptr != NULL;
+}
+
+/* returns the address of the current message. */
+const char* osc_reader_get_msg_address(osc_reader_t *reader) {
+    return reader->msg_ptr;
+}
+
+int osc_reader_get_arg(osc_reader_t *reader, osc_arg_t *arg) {
+    char t = osc_reader_next_arg(reader);
+    if (t < 0) return t;
+    arg->type = t;
+    switch (t) {
+        case 'T':   /* fall through */
+        case 'F':   /* fall through */
+        case 'N':   /* fall through */
+        case 'I':   return OSC_OK;
+        case 'i':   return osc_reader_get_arg_int32(reader, &arg->val.val_int32);
+        case 'h':   return osc_reader_get_arg_int64(reader, &arg->val.val_int64);
+        case 't':   return osc_reader_get_arg_timetag(reader, &arg->val.val_timetag);
+        case 'f':   return osc_reader_get_arg_float(reader, &arg->val.val_float);
+        case 'd':   return osc_reader_get_arg_double(reader, &arg->val.val_double);
+        case 's':   /* fall through */
+        case 'S':   return osc_reader_get_arg_str(reader, &arg->val.val_str);
+        case 'b':   return osc_reader_get_arg_blob(reader, &arg->val.val_blob.data, &arg->val.val_blob.len);
+        default:    return OSC_ERROR;
+    }
+}
+
+char osc_reader_next_arg(osc_reader_t *reader) {
+    if (reader->type_ptr) {
+        char curr = *reader->type_ptr;
+        if (curr) {
+            reader->type_ptr++;
+            return curr;
+        } else {
+            return OSC_END;
+        }
+    } else {
+        return OSC_ERROR;
+    }
+}
+
+#define READ_FIXED(type, target, bits) \
+    if (reader->msg_end - reader->arg_ptr < sizeof(type)) return OSC_ERROR; \
+    uint##bits##_t raw_val = osc_ntoh##bits(*((uint##bits##_t*)reader->arg_ptr)); \
+    *target = *(type*)(&raw_val); \
+    reader->arg_ptr += sizeof(type); 
+    
+int osc_reader_get_arg_int32(osc_reader_t *reader, int32_t *val) {
+    READ_FIXED(int32_t, val, 32);
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_int64(osc_reader_t *reader, int64_t *val) {
+    READ_FIXED(int64_t, val, 64);
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_timetag(osc_reader_t *reader, osc_timetag_t *val) {
+    READ_FIXED(osc_timetag_t, val, 64);
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_float(osc_reader_t *reader, float *val) {
+    READ_FIXED(float, val, 32);
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_double(osc_reader_t *reader, double *val) {
+    READ_FIXED(double, val, 64);
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_str(osc_reader_t *reader, const char **val) {
+    size_t len = ROUND32(strlen(reader->arg_ptr) + 1);
+    if (reader->arg_ptr + len > reader->msg_end) return OSC_ERROR;
+    *val = reader->arg_ptr;
+    reader->arg_ptr += len;
+    return OSC_OK;
+}
+
+int osc_reader_get_arg_blob(osc_reader_t *reader, void **val, int32_t *sz) {
+    READ_FIXED(int32_t, sz, 32);
+    int32_t rounded_sz = ROUND32(*sz);
+    if (reader->arg_ptr + rounded_sz > reader->msg_end) return OSC_ERROR;
+    *val = (void*) reader->arg_ptr;
+    reader->arg_ptr += rounded_sz;
+    return OSC_OK;
+}
+
+#pragma mark -
+#pragma mark TUIO
 
 static const char* profile_addresses[] = {
     NULL,
