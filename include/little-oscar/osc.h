@@ -60,13 +60,14 @@ typedef union {
 // Reading
 
 typedef struct osc_reader {
-    char*               buffer;
-    const char*         buffer_end;
-    char                is_bundle;
-    const char*         msg_ptr;
-    const char*         msg_end;
-    const char*         type_ptr;
-    const char*         arg_ptr;
+    char*               buffer;         /* start of packet buffer */
+    const char*         buffer_end;     /* end of packet buffer */
+    char                is_bundle;      /* 1 if we're reading a bundle */
+    const char*         msg_ptr;        /* position in current message */
+    const char*         msg_end;        /* end of current message */
+    int                 msg_len;        /* length of current message */
+    const char*         type_ptr;       /* ptr to type of current arg, NULL if message has no type tag */
+    const char*         arg_ptr;        /* ptr to current arg, NULL if message has no args */
 } osc_reader_t;
 
 typedef struct {
@@ -112,6 +113,9 @@ osc_timetag_t   osc_reader_get_timetag(osc_reader_t *reader);
  * returns 0 if no messages are left to process, 1 otherwise.
  */
 int             osc_reader_start_msg(osc_reader_t *reader);
+
+/* returns the length of the current message */
+int             osc_reader_msg_get_len(osc_reader_t *reader);
 
 /* returns 1 if the current message has a type tag, 0 otherwise */
 int             osc_reader_msg_is_typed(osc_reader_t *reader);

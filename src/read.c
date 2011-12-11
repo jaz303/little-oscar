@@ -6,6 +6,7 @@ int osc_reader_init(osc_reader_t *reader, char *buffer, int len) {
     
     reader->msg_ptr     = NULL;
     reader->msg_end     = NULL;
+    reader->msg_len     = 0;
     reader->type_ptr    = NULL;
     reader->arg_ptr     = NULL;
     
@@ -111,6 +112,10 @@ int osc_reader_start_msg(osc_reader_t *reader) {
         return OSC_END;
     
     }
+}
+
+int osc_reader_msg_get_len(osc_reader_t *reader) {
+    return reader->msg_len;
 }
 
 /* returns 1 if the current message has a type tag, 0 otherwise */

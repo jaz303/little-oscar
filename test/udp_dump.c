@@ -89,7 +89,11 @@ void dump_osc_packet(char *buffer, int len, int indent) {
         p_indent(indent);
         printf("#bundle (timetag=xxx,sz=xxx)\n");
         while (osc_reader_start_msg(&reader) == OSC_OK) {
-            
+            if (0) {
+                
+            } else {
+                dump_osc_message(&reader, indent + 1);
+            }
         }
         // get message length
         // start iteratng over messages and dump
