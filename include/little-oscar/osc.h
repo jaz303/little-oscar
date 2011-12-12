@@ -32,9 +32,11 @@
 //
 // Return codes
 
-#define OSC_OK       0
-#define OSC_ERROR   -1
-#define OSC_END     -2
+#define OSC_MESSAGE     2
+#define OSC_BUNDLE      1
+#define OSC_OK          0
+#define OSC_ERROR      -1
+#define OSC_END        -2
 
 //
 // Types
@@ -59,16 +61,18 @@ typedef union {
 //
 // Reading
 
-typedef struct osc_reader {
-    char*               buffer;         /* start of packet buffer */
-    const char*         buffer_end;     /* end of packet buffer */
-    char                is_bundle;      /* 1 if we're reading a bundle */
-    const char*         msg_ptr;        /* position in current message */
-    const char*         msg_end;        /* end of current message */
-    int                 msg_len;        /* length of current message */
-    const char*         type_ptr;       /* ptr to type of current arg, NULL if message has no type tag */
-    const char*         arg_ptr;        /* ptr to current arg, NULL if message has no args */
-} osc_reader_t;
+typedef struct {
+    const char              *bundle_ptr;
+    const char              *bundle_end;
+    const char              *msg_ptr;
+} osc_bundle_reader_t;
+
+typedef struct {
+    const char              *msg_ptr;
+    const char              *msg_end;
+    const char              *type_ptr;
+    const char              *arg_ptr;
+} osc_msg_reader_t;
 
 typedef struct {
     char type;
@@ -86,42 +90,15 @@ typedef struct {
     } val;
 } osc_arg_t;
 
-/*
- * initialise an osc_reader with a buffer containing an OSC packet of a given
- * length. the packet may contain either a single OSC message or a message
- * bundle.
- *
- * for bundles, a quick sanity check will be performed to ensure that all
- * message sizes are sane.
- *
- * returns OSC_OK on success.
- *
- * NOTE: buffer *MUST* be padded with a single null-terminator character to
- *       prevent ill-formed OSC-strings from causing a buffer overflow.
- *       `message_len` MUST NOT include the null-terminator. 
- */
-int             osc_reader_init(osc_reader_t *reader, char *buffer, int len);
+int                 osc_packet_get_type(const char *buffer, int len);
 
-/* returns 1 if the packet is a bundle, 0 otherwise */
-int             osc_reader_is_bundle(osc_reader_t *reader);
+int                 osc_bundle_reader_init(osc_bundle_reader_t *reader, const char *buffer, int len);
+osc_timetag_t       osc_bundle_reader_get_timetag(osc_bundle_reader_t *reader);
+int                 osc_bundle_reader_next(osc_bundle_reader_t *reader, const char **start, int32_t *len);
 
-/* returns the bundle's OSC timetag, or OSC_NOW if packet is not a bundle */
-osc_timetag_t   osc_reader_get_timetag(osc_reader_t *reader);
-
-/*
- * start processing the next message in this packet.
- * returns 0 if no messages are left to process, 1 otherwise.
- */
-int             osc_reader_start_msg(osc_reader_t *reader);
-
-/* returns the length of the current message */
-int             osc_reader_msg_get_len(osc_reader_t *reader);
-
-/* returns 1 if the current message has a type tag, 0 otherwise */
-int             osc_reader_msg_is_typed(osc_reader_t *reader);
-
-/* returns the address of the current message. */
-const char*     osc_reader_get_msg_address(osc_reader_t *reader);
+int                 osc_msg_reader_init(osc_msg_reader_t *reader, const char *buffer, int len);
+int                 osc_msg_reader_is_typed(osc_msg_reader_t *reader);
+const char *        osc_msg_reader_get_address(osc_msg_reader_t *reader);
 
 /*
  * convenience function.
@@ -131,14 +108,14 @@ const char*     osc_reader_get_msg_address(osc_reader_t *reader);
  * remaining to read.
  * this function requires that the current message has a type tag.
  */
-int             osc_reader_get_arg(osc_reader_t *reader, osc_arg_t *arg);
+int                 osc_msg_reader_get_arg(osc_msg_reader_t *reader, osc_arg_t *arg);
 
 /*
  * returns the type at the current message's arg pointer the advances the ptr to 
  * the next argument. returns 0 if there was no argument remaining to read.
  * (this function requires that the current message has a type tag)
  */
-char            osc_reader_next_arg(osc_reader_t *reader);
+char                osc_msg_reader_next_arg(osc_msg_reader_t *reader);
 
 /*
  * the following functions read data from the current message's argument pointer
@@ -150,15 +127,12 @@ char            osc_reader_next_arg(osc_reader_t *reader);
  * current argument would cause the argument pointer to advance beyond the end
  * of the current message.
  */
-int             osc_reader_get_arg_int32(osc_reader_t *reader, int32_t *val);
-int             osc_reader_get_arg_int64(osc_reader_t *reader, int64_t *val);
-int             osc_reader_get_arg_timetag(osc_reader_t *reader, osc_timetag_t *val);
-int             osc_reader_get_arg_float(osc_reader_t *reader, float *val);
-int             osc_reader_get_arg_double(osc_reader_t *reader, double *val);
-int             osc_reader_get_arg_str(osc_reader_t *reader, const char **val);
-int             osc_reader_get_arg_blob(osc_reader_t *reader, void **val, int32_t *sz);
-
-/* returns 0 if the reader object is in an error state, 1 otherwise */
-int             osc_reader_ok(osc_reader_t *reader);
+int                 osc_msg_reader_get_arg_int32(osc_msg_reader_t *reader, int32_t *val);
+int                 osc_msg_reader_get_arg_int64(osc_msg_reader_t *reader, int64_t *val);
+int                 osc_msg_reader_get_arg_timetag(osc_msg_reader_t *reader, osc_timetag_t *val);
+int                 osc_msg_reader_get_arg_float(osc_msg_reader_t *reader, float *val);
+int                 osc_msg_reader_get_arg_double(osc_msg_reader_t *reader, double *val);
+int                 osc_msg_reader_get_arg_str(osc_msg_reader_t *reader, const char **val);
+int                 osc_msg_reader_get_arg_blob(osc_msg_reader_t *reader, void **val, int32_t *sz);
 
 #endif

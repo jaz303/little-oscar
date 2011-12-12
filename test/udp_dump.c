@@ -8,8 +8,8 @@
 
 #include "little-oscar/osc.h"
 
-void dump_osc_message(osc_reader_t *reader, int indent);
-void dump_osc_packet(char *buffer, int len, int indent);
+void dump_osc_message(osc_msg_reader_t *reader, int indent);
+void dump_osc_packet(const char *buffer, int len, int indent);
 
 int main(int argc, char *argv[]) {
     
@@ -44,15 +44,15 @@ void p_indent(int c) {
 }
 
 
-void dump_osc_message(osc_reader_t *reader, int indent) {
+void dump_osc_message(osc_msg_reader_t *reader, int indent) {
     p_indent(indent);
-    printf("%s\n", osc_reader_get_msg_address(reader));
+    printf("%s\n", osc_msg_reader_get_address(reader));
     
     indent++;
     
-    if (osc_reader_msg_is_typed(reader)) {
+    if (osc_msg_reader_is_typed(reader)) {
         osc_arg_t arg;
-        while (osc_reader_get_arg(reader, &arg) == OSC_OK) {
+        while (osc_msg_reader_get_arg(reader, &arg) == OSC_OK) {
             p_indent(indent);
             putchar(arg.type);
             putchar(':');
@@ -80,27 +80,41 @@ void dump_osc_message(osc_reader_t *reader, int indent) {
     }
 }
 
-void dump_osc_packet(char *buffer, int len, int indent) {
+void dump_osc_packet(const char *buffer, int len, int indent) {
+    osc_msg_reader_t mr;
     
-    osc_reader_t reader;
-    osc_reader_init(&reader, buffer, len);
-    
-    if (osc_reader_is_bundle(&reader)) {
-        p_indent(indent);
-        printf("#bundle (timetag=xxx,sz=xxx)\n");
-        while (osc_reader_start_msg(&reader) == OSC_OK) {
-            if (0) {
-                
-            } else {
-                dump_osc_message(&reader, indent + 1);
+    int type = osc_packet_get_type(buffer, len);
+    if (type == OSC_MESSAGE) {
+        if (osc_msg_reader_init(&mr, buffer, len) == OSC_OK) {
+            dump_osc_message(&mr, indent);
+        } else {
+            // ERROR
+            return;
+        }
+    } else if (type == OSC_BUNDLE) {
+        osc_bundle_reader_t br;
+        if (osc_bundle_reader_init(&br, buffer, len) == OSC_OK) {
+            p_indent(indent);
+            printf("#bundle (timetag=xxx,sz=xxx)\n");
+            const char *msg_start;
+            int32_t msg_len;
+            while ((type = osc_bundle_reader_next(&br, &msg_start, &msg_len)) > OSC_OK) {
+                if (type == OSC_MESSAGE) {
+                    if (osc_msg_reader_init(&mr, msg_start, msg_len) == OSC_OK) {
+                        dump_osc_message(&mr, indent + 1);
+                    } else {
+                        // ERROR
+                        return;
+                    }
+                } else {
+                    dump_osc_packet(msg_start, msg_len, indent + 1);
+                }
             }
+        } else {
+            // ERROR
+            return;
         }
-        // get message length
-        // start iteratng over messages and dump
     } else {
-        if (osc_reader_start_msg(&reader) == OSC_OK) {
-            dump_osc_message(&reader, indent);
-        }
+        // ERROR
     }
-
 }
