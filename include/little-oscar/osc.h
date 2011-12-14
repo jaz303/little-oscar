@@ -2,9 +2,9 @@
 #define OSC_H
 
 //
-// HAL
+// PAL
 
-#ifndef OSC_GOT_HAL
+#ifndef OSC_GOT_PAL
 
 #include <stdint.h>     /* int32_t, int64_t, uint32_t, uint64_t */
 #include <string.h>     /* strlen() */
@@ -26,7 +26,11 @@
 
 #endif
 
-// End HAL
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// End PAL
 //
 
 //
@@ -134,5 +138,9 @@ int                 osc_msg_reader_get_arg_float(osc_msg_reader_t *reader, float
 int                 osc_msg_reader_get_arg_double(osc_msg_reader_t *reader, double *val);
 int                 osc_msg_reader_get_arg_str(osc_msg_reader_t *reader, const char **val);
 int                 osc_msg_reader_get_arg_blob(osc_msg_reader_t *reader, void **val, int32_t *sz);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
