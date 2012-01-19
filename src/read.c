@@ -31,8 +31,8 @@ int osc_bundle_reader_next(osc_bundle_reader_t *reader, const char **start, int3
     *start  = (reader->msg_ptr + 4);
     *len    = msg_len.i32;
     
-    const char *next = (*start) + (*len);
-    if (next > reader->bundle_end) return OSC_ERROR;
+    reader->msg_ptr = (*start) + (*len);
+    if (reader->msg_ptr > reader->bundle_end) return OSC_ERROR;
     
     /* checks message length & alignment */
     return osc_packet_get_type(*start, *len);
