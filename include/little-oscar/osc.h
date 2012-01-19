@@ -2,31 +2,50 @@
 #define OSC_H
 
 //
-// HAL
+// PAL
 
-#ifndef OSC_GOT_HAL
+#ifndef OSC_GOT_PAL
+    #include <stdint.h>     /* int32_t, int64_t, uint32_t, uint64_t */
+    #include <string.h>     /* strlen() */
 
-#include <stdint.h>     /* int32_t, int64_t, uint32_t, uint64_t */
-#include <string.h>     /* strlen() */
-#include <arpa/inet.h>  /* htonl(), ntohl() */
+    #if defined(__WIN32) || defined(__WIN32__) || defined(__WIN64) || defined(__WIN64__)
+        #define OSC_LITTLE_ENDIAN
+        #include <winsock2.h>   /* htonl(), ntohl() */
+    #else
+        #include <arpa/inet.h>  /* htonl(), ntohl() */
 
-#if BYTE_ORDER == BIG_ENDIAN
-    #define osc_hton32(i)   (i)
-    #define osc_hton64(i)   (i)
-    #define osc_ntoh32(i)   (i)
-    #define osc_ntoh64(i)   (i)
-#elif BYTE_ORDER == LITTLE_ENDIAN
-    #define osc_hton32(i)   htonl(i)
-    #define osc_hton64(i)   (((uint64_t)htonl(i) << 32) | htonl(i >> 32))
-    #define osc_ntoh32(i)   ntohl(i)
-    #define osc_ntoh64(i)   (((uint64_t)ntohl(i) << 32) | ntohl(i >> 32))
-#else
-    #error "Byte order is undefined!"
+        #if defined BYTE_ORDER
+            #if BYTE_ORDER == BIG_ENDIAN
+                #define OSC_BIG_ENDIAN
+            #elif BYTE_ORDER == LITTLE_ENDIAN
+                #define OSC_LITTLE_ENDIAN
+            #endif
+        #endif
+    #endif
+
+    #if defined(OSC_BIG_ENDIAN)
+        #define osc_hton32(i)   (i)
+        #define osc_hton64(i)   (i)
+        #define osc_ntoh32(i)   (i)
+        #define osc_ntoh64(i)   (i)
+    #elif defined(OSC_LITTLE_ENDIAN)
+        #define osc_hton32(i)   htonl(i)
+        #define osc_hton64(i)   (((uint64_t)htonl(i) << 32) | htonl(i >> 32))
+        #define osc_ntoh32(i)   ntohl(i)
+        #define osc_ntoh64(i)   (((uint64_t)ntohl(i) << 32) | ntohl(i >> 32))
+    #else
+        #error "Byte order is undefined!"
+    #endif
+
+    #undef OSC_BIG_ENDIAN
+    #undef OSC_LITTLE_ENDIAN
 #endif
 
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-// End HAL
+// End PAL
 //
 
 //
@@ -134,5 +153,9 @@ int                 osc_msg_reader_get_arg_float(osc_msg_reader_t *reader, float
 int                 osc_msg_reader_get_arg_double(osc_msg_reader_t *reader, double *val);
 int                 osc_msg_reader_get_arg_str(osc_msg_reader_t *reader, const char **val);
 int                 osc_msg_reader_get_arg_blob(osc_msg_reader_t *reader, void **val, int32_t *sz);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
