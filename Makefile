@@ -4,7 +4,8 @@ CFLAGS		= -Iinclude
 %.o: %.c
 	gcc -c $(CFLAGS) -o $@ $<
 
-SRC_OBJS	=	src/read.o
+SRC_OBJS	=	src/read.o \
+				src/write.o
 
 TEST_OBJS	=	test/udp_dump.o
 
