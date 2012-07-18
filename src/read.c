@@ -114,7 +114,7 @@ char osc_msg_reader_next_arg(osc_msg_reader_t *reader) {
 
 #define READ_FIXED(target, bits, union_member) \
     osc_v##bits##_t raw_val; \
-    if (reader->msg_end - reader->arg_ptr < sizeof(raw_val.union_member)) return OSC_ERROR; \
+    if (reader->msg_end - reader->arg_ptr < (int)sizeof(raw_val.union_member)) return OSC_ERROR; \
     raw_val.u##bits = osc_ntoh##bits(*((uint##bits##_t*)reader->arg_ptr)); \
     *target = raw_val.union_member; \
     reader->arg_ptr += sizeof(raw_val.union_member);
